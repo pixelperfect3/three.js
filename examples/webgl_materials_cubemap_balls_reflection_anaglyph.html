@@ -93,7 +93,7 @@
 				var textureCube = THREE.ImageUtils.loadTextureCube( urls );
 				var material = new THREE.MeshBasicMaterial( { color: 0xffffff, envMap: textureCube } );
 
-				for ( var i = 0; i < 500; i ++ ) {
+				for ( var i = 0; i < 250; i ++ ) {
 
 					var mesh = new THREE.Mesh( geometry, material );
 					mesh.position.x = Math.random() * 10000 - 5000;
@@ -108,7 +108,14 @@
 
 				THREE.SceneUtils.addPanoramaCubeWebGL( sceneCube, 100000, textureCube );
 
-				webglRenderer = new THREE.WebGLRenderer();
+				// initialize the anaglyphrenderer
+				/*anaglyphRenderer = new THREE.AnaglyphWebGLRenderer();
+				anaglyphRenderer.setSize( window.innerWidth, window.innerHeight );
+				anaglyphRenderer.autoClear = false;
+				container.appendChild( anaglyphRenderer.domElement );*/
+				
+				
+				webglRenderer = new THREE.AnaglyphWebGLRenderer();
 				webglRenderer.setSize( window.innerWidth, window.innerHeight );
 				webglRenderer.autoClear = false;
 				container.appendChild( webglRenderer.domElement );

@@ -5,7 +5,7 @@
  * @author szimek / https://github.com/szimek/
  */
 
-THREE.WebGLRenderer = function ( parameters ) {
+THREE.AnaglyphWebGLRenderer = function ( parameters ) {
 
 	// Currently you can use just up to 4 directional / point lights total.
 	// Chrome barfs on shader linking when there are more than 4 lights :(
@@ -25,7 +25,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 	_currentProgram = null,
 	_currentFramebuffer = null,
 	_currentDepthMask = true,
-
+	
 	// gl state cache
 
 	_oldDoubleSided = null,
@@ -84,6 +84,11 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 	};
 
+	// the render targets
+	var redRenderTarget = {};
+	var blueRenderTarget = {};
+	var finalRenderTarget = {};
+	
 	this.maxMorphTargets = 8;
 	this.domElement = _canvas;
 	this.autoClear = true;
@@ -139,8 +144,8 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 	this.context = _gl;
 
-	var _supportsVertexTextures = ( maxVertexTextures() > 0 );
-
+	var _supportsVertexTextures = ( maxVertexTextures() > 0 );	
+	
 	// prepare stencil shadow polygon
 
 	if ( _stencil ) {
@@ -151,10 +156,12 @@ THREE.WebGLRenderer = function ( parameters ) {
 		_stencilShadow.faces    = new Uint16Array( 6 );
 		_stencilShadow.darkness = 0.5;
 
-		_stencilShadow.vertices[ 0 * 3 + 0 ] = -20; _stencilShadow.vertices[ 0 * 3 + 1 ] = -20; _stencilShadow.vertices[ 0 * 3 + 2 ] = -1;
-		_stencilShadow.vertices[ 1 * 3 + 0 ] =  20; _stencilShadow.vertices[ 1 * 3 + 1 ] = -20; _stencilShadow.vertices[ 1 * 3 + 2 ] = -1;
-		_stencilShadow.vertices[ 2 * 3 + 0 ] =  20; _stencilShadow.vertices[ 2 * 3 + 1 ] =  20; _stencilShadow.vertices[ 2 * 3 + 2 ] = -1;
-		_stencilShadow.vertices[ 3 * 3 + 0 ] = -20; _stencilShadow.vertices[ 3 * 3 + 1 ] =  20; _stencilShadow.vertices[ 3 * 3 + 2 ] = -1;
+		var size = 500;
+		
+		_stencilShadow.vertices[ 0 * 3 + 0 ] = -size; _stencilShadow.vertices[ 0 * 3 + 1 ] = -size; _stencilShadow.vertices[ 0 * 3 + 2 ] = -1;
+		_stencilShadow.vertices[ 1 * 3 + 0 ] =  size; _stencilShadow.vertices[ 1 * 3 + 1 ] = -size; _stencilShadow.vertices[ 1 * 3 + 2 ] = -1;
+		_stencilShadow.vertices[ 2 * 3 + 0 ] =  size; _stencilShadow.vertices[ 2 * 3 + 1 ] =  size; _stencilShadow.vertices[ 2 * 3 + 2 ] = -1;
+		_stencilShadow.vertices[ 3 * 3 + 0 ] = -size; _stencilShadow.vertices[ 3 * 3 + 1 ] =  size; _stencilShadow.vertices[ 3 * 3 + 2 ] = -1;
 
 		_stencilShadow.faces[ 0 ] = 0; _stencilShadow.faces[ 1 ] = 1; _stencilShadow.faces[ 2 ] = 2;
 		_stencilShadow.faces[ 3 ] = 0; _stencilShadow.faces[ 4 ] = 2; _stencilShadow.faces[ 5 ] = 3;
@@ -180,7 +187,63 @@ THREE.WebGLRenderer = function ( parameters ) {
 		_stencilShadow.darknessLocation   = _gl.getUniformLocation( _stencilShadow.program, "darkness"         );
 	}
 
+	/** Prepare Anaglyph Rendering **/
+	var _anaglyph      = {};
 
+	_anaglyph.vertices = new Float32Array( 20 );
+	_anaglyph.faces    = new Uint16Array( 6 );
+	
+	var x = 24; var y = 15;
+	var z = -25;
+	
+	// s is just placeholder value for now
+	_anaglyph.vertices[ 0 * 5 + 0 ] = -x; _anaglyph.vertices[ 0 * 5 + 1 ] = -y; _anaglyph.vertices[ 0 * 5 + 2 ] = z; // vertices...
+	_anaglyph.vertices[ 0 * 5 + 3 ] =   0; _anaglyph.vertices[ 0 * 5 + 4 ] =   0; 											// uv...
+	
+	_anaglyph.vertices[ 1 * 5 + 0 ] =  x; _anaglyph.vertices[ 1 * 5 + 1 ] = -y; _anaglyph.vertices[ 1 * 5 + 2 ] = z; // vertices...
+	_anaglyph.vertices[ 1 * 5 + 3 ] =   1; _anaglyph.vertices[ 1 * 5 + 4 ] =   0;											// uv...
+	
+	_anaglyph.vertices[ 2 * 5 + 0 ] =  x; _anaglyph.vertices[ 2 * 5 + 1 ] =  y; _anaglyph.vertices[ 2 * 5 + 2 ] = z; // vertices...
+	_anaglyph.vertices[ 2 * 5 + 3 ] =   1; _anaglyph.vertices[ 2 * 5 + 4 ] =   1;
+	
+	_anaglyph.vertices[ 3 * 5 + 0 ] = -x; _anaglyph.vertices[ 3 * 5 + 1 ] =  y; _anaglyph.vertices[ 3 * 5 + 2 ] = z; // vertices...
+	_anaglyph.vertices[ 3 * 5 + 3 ] =   0; _anaglyph.vertices[ 3 * 5 + 4 ] =   1;											// uv...
+
+	_anaglyph.faces[ 0 ] = 0; _anaglyph.faces[ 1 ] = 1; _anaglyph.faces[ 2 ] = 2;
+	_anaglyph.faces[ 3 ] = 0; _anaglyph.faces[ 4 ] = 2; _anaglyph.faces[ 5 ] = 3;
+
+	_anaglyph.vertexBuffer  = _gl.createBuffer();
+	_anaglyph.elementBuffer = _gl.createBuffer();
+
+	_gl.bindBuffer( _gl.ARRAY_BUFFER, _anaglyph.vertexBuffer );
+	_gl.bufferData( _gl.ARRAY_BUFFER,  _anaglyph.vertices, _gl.STATIC_DRAW );
+
+	_gl.bindBuffer( _gl.ELEMENT_ARRAY_BUFFER, _anaglyph.elementBuffer );
+	_gl.bufferData( _gl.ELEMENT_ARRAY_BUFFER, _anaglyph.faces, _gl.STATIC_DRAW );
+
+	// load the shader for rendering the plane
+	_anaglyph.program = _gl.createProgram();
+
+	_gl.attachShader( _anaglyph.program, getShader( "vertex",   THREE.ShaderLib.anaglyph.vertexShader   ));
+	_gl.attachShader( _anaglyph.program, getShader( "fragment", THREE.ShaderLib.anaglyph.fragmentShader ));
+	
+
+	_gl.linkProgram( _anaglyph.program );
+
+	//alert("Anaglyph Program: " + _anaglyph.program );
+	
+	// associate attributes/textures/uniforms
+	_anaglyph.vertexLocation     = _gl.getAttribLocation( _anaglyph.program, "position" );
+	_anaglyph.uv				 = _gl.getAttribLocation( _anaglyph.program, "UV" );
+	_anaglyph.projectionLocation = _gl.getUniformLocation( _anaglyph.program, "projectionMatrix" );
+	// the textures - red and blue
+	_anaglyph.texture1 			 = _gl.getUniformLocation( _anaglyph.program, "texture1" );
+	_anaglyph.texture2 			 = _gl.getUniformLocation( _anaglyph.program, "texture2" );
+	
+	var _anaglyphAttributesEnabled = false;
+
+	//alert("Anaglyph Program2: " + _anaglyph.vertexLocation + " , " + _anaglyph.uv);
+	
 	// prepare lens flare
 
 	var _lensFlare = {};
@@ -331,6 +394,12 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 		this.setViewport( 0, 0, _canvas.width, _canvas.height );
 
+		// for now just try to create the render targets
+		redRenderTarget = createRenderTarget();
+		//alert('Red Render Target just created: ' + redRenderTarget.width);
+		blueRenderTarget = createRenderTarget();
+		finalRenderTarget = createRenderTarget();
+		
 	};
 
 	this.setViewport = function ( x, y, width, height ) {
@@ -3078,6 +3147,14 @@ THREE.WebGLRenderer = function ( parameters ) {
 		_this.data.faces = 0;
 		_this.data.drawCalls = 0;
 
+		/*** START DRAWING THE RED TEXTURE ***/
+		// attach the red texture
+		_gl.bindFramebuffer(_gl.FRAMEBUFFER, redRenderTarget.__webglFramebuffer);
+		_gl.clear( _gl.COLOR_BUFFER_BIT | _gl.DEPTH_BUFFER_BIT | _gl.STENCIL_BUFFER_BIT );
+		
+		// only draw red
+		_gl.colorMask(true, false, false, false);
+		
 		camera.matrixAutoUpdate && camera.update( undefined, true );
 
 		scene.update( undefined, false, camera );
@@ -3091,12 +3168,10 @@ THREE.WebGLRenderer = function ( parameters ) {
 		this.initWebGLObjects( scene );
 
 		// test
-		//alert('Render Target: ' + renderTarget);
+		//alert('Render Target width: ' + redRenderTarget.width);
 		
-		setRenderTarget( renderTarget );
+		//setRenderTarget( renderTarget );
 
-		//alert('Render Target2: ' + renderTarget);
-		
 		if ( this.autoClear || forceClear ) {
 
 			this.clear();
@@ -3325,6 +3400,32 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 		}
 
+		
+		/******** STOP DRAWING RED TEXTURE ************/
+		
+		/*********** START DRAWING BLUE TEXTURE **********/
+		
+		// update camera position
+		
+		/*** STOP DRAWING BLUE ****/
+		
+		// generate a new camera - just place it on the z-axis
+		anaglyphCamera = new THREE.Camera( 60, window.innerWidth / window.innerHeight, 1, 1000 );
+		
+		// update camera
+		anaglyphCamera.matrixWorldInverse.flattenToArray( _viewMatrixArray );
+		anaglyphCamera.projectionMatrix.flattenToArray( _projectionMatrixArray );
+
+		_projScreenMatrix.multiply( anaglyphCamera.projectionMatrix, anaglyphCamera.matrixWorldInverse );
+		computeFrustum( _projScreenMatrix );
+		
+		
+		// Render a texture onto the screen
+		// attach the final texture
+		_gl.bindFramebuffer(_gl.FRAMEBUFFER, null);//finalRenderTarget.__webglFramebuffer);
+		_gl.clear( _gl.COLOR_BUFFER_BIT | _gl.DEPTH_BUFFER_BIT | _gl.STENCIL_BUFFER_BIT );
+		renderAnaglyph( scene, redRenderTarget, redRenderTarget );
+		
 		_gl.finish();
 
 	};
@@ -3620,6 +3721,65 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 
 
+	/*
+	 * Renders the anaglyph texture which combines the red and blue textures
+	 */
+	function renderAnaglyph( scene, renderTarget1, renderTarget2 ) {
+		//alert("Render Target1: " + renderTarget1.width);
+	
+		// set anaglyph rendering
+		_gl.useProgram( _anaglyph.program );
+		_currentProgram = _anaglyph.program;
+		_oldBlending = -1;
+
+		// enable attributes
+		if ( ! _anaglyphAttributesEnabled ) {
+			_gl.enableVertexAttribArray( _anaglyph.vertexLocation );
+			_gl.enableVertexAttribArray( _anaglyph.uv );
+		
+			_anaglyphAttributesEnabled = true;	
+		}
+		
+		// send the camera transforms
+		_gl.uniformMatrix4fv( _anaglyph.projectionLocation, false, _projectionMatrixArray );
+
+		// send the red and blue textures
+		
+		// red
+		_gl.activeTexture( _gl.TEXTURE0 );
+		_gl.bindTexture( _gl.TEXTURE_2D, renderTarget1.__webglTexture );
+		_gl.uniform1i( _anaglyph.texture1, 0 );
+		
+		// blue
+		_gl.activeTexture( _gl.TEXTURE1 );
+		_gl.bindTexture( _gl.TEXTURE_2D, renderTarget2.__webglTexture ); // TODO: Change to blue
+		_gl.uniform1i( _anaglyph.texture2, 1 );
+		
+		// bind vertex buffer		
+		_gl.bindBuffer( _gl.ARRAY_BUFFER, _anaglyph.vertexBuffer );
+		_gl.vertexAttribPointer( _anaglyph.vertexLocation, 3, _gl.FLOAT, false, 5 * 4, 0 );
+		_gl.vertexAttribPointer( _anaglyph.uv, 2, _gl.FLOAT, false, 5 * 4, 3 * 4 );
+
+		
+		
+		// bind the index buffer
+		_gl.bindBuffer( _gl.ELEMENT_ARRAY_BUFFER, _anaglyph.elementBuffer );
+
+		_gl.disable( _gl.CULL_FACE );
+		_gl.colorMask(true, true, true, true);
+		_gl.depthMask( false );
+		
+		// draw 
+		_gl.drawElements( _gl.TRIANGLES, 6, _gl.UNSIGNED_SHORT, 0 );
+		
+		// restore gl
+
+		_gl.enable( _gl.CULL_FACE );
+		_gl.enable( _gl.DEPTH_TEST );
+		_gl.depthMask( _currentDepthMask );
+
+	};
+	
 	/*
 	 * Render lens flares
 	 * Method: renders 16x16 0xff00ff-colored points scattered over the light source area, 
@@ -4755,7 +4915,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 	function setRenderTarget( renderTexture ) {
 
 		if ( renderTexture && !renderTexture.__webglFramebuffer ) {
-			alert("in first one");
+			//alert("in first one");
 			
 			if( renderTexture.depthBuffer === undefined ) renderTexture.depthBuffer = true;
 			if( renderTexture.stencilBuffer === undefined ) renderTexture.stencilBuffer = true;
@@ -4815,7 +4975,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 		var framebuffer, width, height;
 
 		if ( renderTexture ) {
-			alert("in 2nd one");
+			//alert("in 2nd one");
 			framebuffer = renderTexture.__webglFramebuffer;
 			width = renderTexture.width;
 			height = renderTexture.height;
@@ -4829,7 +4989,7 @@ THREE.WebGLRenderer = function ( parameters ) {
 		}
 
 		if ( framebuffer != _currentFramebuffer ) {
-			alert("in 4 one");
+			//alert("in 4 one");
 			_gl.bindFramebuffer( _gl.FRAMEBUFFER, framebuffer );
 			_gl.viewport( _viewportX, _viewportY, width, height );
 
@@ -5177,6 +5337,62 @@ THREE.WebGLRenderer = function ( parameters ) {
 
 	};
 
+	// added by pixelperfect3
+	function createRenderTarget() {
+		// Setup texture
+		var renderTexture = {};
+			
+		if( renderTexture.depthBuffer === undefined ) renderTexture.depthBuffer = true;
+		if( renderTexture.stencilBuffer === undefined ) renderTexture.stencilBuffer = true;
+
+		// generate the texture and framebuffer/renderbuffer
+		renderTexture.__webglFramebuffer = _gl.createFramebuffer();
+		renderTexture.__webglRenderbuffer = _gl.createRenderbuffer();
+		renderTexture.__webglTexture = _gl.createTexture();
+		
+		// set width and height
+		//alert('Canvas width: ' + _canvas.width);
+		renderTexture.width = _canvas.width;
+		renderTexture.height = _canvas.height;
+		
+		// bind texture and set it's parameters
+		_gl.bindTexture( _gl.TEXTURE_2D, renderTexture.__webglTexture );
+		
+		_gl.texParameteri( _gl.TEXTURE_2D, _gl.TEXTURE_WRAP_S, _gl.CLAMP_TO_EDGE );
+		_gl.texParameteri( _gl.TEXTURE_2D, _gl.TEXTURE_WRAP_T, _gl.CLAMP_TO_EDGE );
+		_gl.texParameteri( _gl.TEXTURE_2D, _gl.TEXTURE_MAG_FILTER, _gl.NEAREST );
+		_gl.texParameteri( _gl.TEXTURE_2D, _gl.TEXTURE_MIN_FILTER, _gl.NEAREST );
+		_gl.texImage2D(_gl.TEXTURE_2D, 0, _gl.RGBA, renderTexture.width, renderTexture.height, 0, _gl.RGBA, _gl.UNSIGNED_BYTE, null);
+		
+		/*
+		_gl.texParameteri( _gl.TEXTURE_2D, _gl.TEXTURE_WRAP_S, paramThreeToGL( renderTexture.wrapS ) );
+		_gl.texParameteri( _gl.TEXTURE_2D, _gl.TEXTURE_WRAP_T, paramThreeToGL( renderTexture.wrapT ) );
+		_gl.texParameteri( _gl.TEXTURE_2D, _gl.TEXTURE_MAG_FILTER, paramThreeToGL( renderTexture.magFilter ) );
+		_gl.texParameteri( _gl.TEXTURE_2D, _gl.TEXTURE_MIN_FILTER, paramThreeToGL( renderTexture.minFilter ) );
+		_gl.texImage2D( _gl.TEXTURE_2D, 0, paramThreeToGL( renderTexture.format ), renderTexture.width, renderTexture.height, 0, paramThreeToGL( renderTexture.format ), paramThreeToGL( renderTexture.type ), null );*/
+
+		// Setup render and frame buffer
+
+		_gl.bindRenderbuffer( _gl.RENDERBUFFER, renderTexture.__webglRenderbuffer );
+		_gl.bindFramebuffer( _gl.FRAMEBUFFER, renderTexture.__webglFramebuffer );
+		
+		// the color texture
+		_gl.framebufferTexture2D( _gl.FRAMEBUFFER, _gl.COLOR_ATTACHMENT0, _gl.TEXTURE_2D, renderTexture.__webglTexture, 0 );
+
+		// the depth attachment
+		_gl.renderbufferStorage( _gl.RENDERBUFFER, _gl.DEPTH_COMPONENT16, renderTexture.width, renderTexture.height );
+		_gl.framebufferRenderbuffer( _gl.FRAMEBUFFER, _gl.DEPTH_ATTACHMENT, _gl.RENDERBUFFER, renderTexture.__webglRenderbuffer );
+		
+		// Release everything
+		_gl.bindTexture( _gl.TEXTURE_2D, null );
+		_gl.bindRenderbuffer( _gl.RENDERBUFFER, null );
+		_gl.bindFramebuffer( _gl.FRAMEBUFFER, null);
+		
+		// return
+		return renderTexture;
+	};
+	
+	
 	/* DEBUG
 	function getGLParams() {
 

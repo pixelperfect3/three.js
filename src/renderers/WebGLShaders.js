@@ -792,6 +792,47 @@ THREE.ShaderLib = {
 
 	},
 
+	'anaglyph': {
+
+		vertexShader: [
+
+			"uniform	mat4	projectionMatrix;",
+			"attribute	vec3	position;",
+			"attribute	vec2	UV;",
+
+			"varying	vec2	vUV;",
+
+			"void main(void)",
+			"{",
+				"vUV = UV;",
+				"gl_Position = projectionMatrix * vec4( position, 1.0 );",
+			"}"
+
+		].join( "\n" ),
+
+		fragmentShader: [
+
+			"#ifdef GL_ES",
+				"precision mediump float;",
+			"#endif",		
+			
+			"uniform	sampler2D	texture1;",
+			"uniform	sampler2D	texture2;",
+			
+			"varying	vec2		vUV;",
+
+			"void main( void )",
+			"{",
+				"vec4 color1 = texture2D(texture1, vUV);",
+				"vec4 color2 = texture2D(texture2, vUV);",
+				"gl_FragColor = vec4((color1.x + color2.x)/2.0, 0.0, (color1.z + color2.z)/2.0, 1.0);",
+				"//gl_FragColor = mix(color1, color2);",
+			"}"
+
+		].join( "\n" )
+
+	},
+	
 	'sprite': {
 		
 		vertexShader: [

@@ -71,6 +71,7 @@ COMMON_FILES = [
 'renderers/SVGRenderer.js',
 'renderers/WebGLShaders.js',
 'renderers/WebGLRenderer.js',
+'renderers/AnaglyphWebGLRenderer.js',
 'renderers/WebGLRenderTarget.js',
 'renderers/SoundRenderer.js',
 'renderers/renderables/RenderableVertex.js',
@@ -292,6 +293,7 @@ WEBGL_FILES = [
 'renderers/Projector.js',
 'renderers/SoundRenderer.js',
 'renderers/WebGLShaders.js',
+'renderers/AnaglyphWebGLRenderer.js',
 'renderers/WebGLRenderer.js',
 'renderers/WebGLRenderTarget.js'
 ]
