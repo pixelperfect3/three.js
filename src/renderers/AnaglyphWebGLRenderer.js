@@ -89,6 +89,8 @@ THREE.AnaglyphWebGLRenderer = function ( parameters ) {
 	var blueRenderTarget = {};
 	var finalRenderTarget = {};
 	
+	var switchTarget = false;
+	
 	this.maxMorphTargets = 8;
 	this.domElement = _canvas;
 	this.autoClear = true;
@@ -128,9 +130,9 @@ THREE.AnaglyphWebGLRenderer = function ( parameters ) {
 	_gl.cullFace( _gl.BACK );
 	_gl.enable( _gl.CULL_FACE );
 
-	_gl.enable( _gl.BLEND );
+	/*_gl.enable( _gl.BLEND );
 	_gl.blendEquation( _gl.FUNC_ADD );
-	_gl.blendFunc( _gl.SRC_ALPHA, _gl.ONE_MINUS_SRC_ALPHA );
+	_gl.blendFunc( _gl.SRC_ALPHA, _gl.ONE_MINUS_SRC_ALPHA );*/
 
 	_gl.clearColor( _clearColor.r, _clearColor.g, _clearColor.b, _clearAlpha );
 
@@ -194,7 +196,7 @@ THREE.AnaglyphWebGLRenderer = function ( parameters ) {
 	_anaglyph.faces    = new Uint16Array( 6 );
 	
 	var x = 24; var y = 15;
-	var z = -25;
+	var z = -15;
 	
 	// s is just placeholder value for now
 	_anaglyph.vertices[ 0 * 5 + 0 ] = -x; _anaglyph.vertices[ 0 * 5 + 1 ] = -y; _anaglyph.vertices[ 0 * 5 + 2 ] = z; // vertices...
@@ -3136,7 +3138,7 @@ THREE.AnaglyphWebGLRenderer = function ( parameters ) {
 
 	};
 
-	this.render = function( scene, camera, renderTarget, forceClear ) {
+	this.render = function( scene, camera, rCamera, renderTarget, forceClear ) {
 
 		var i, program, opaque, transparent, material,
 			o, ol, oil, webglObject, object, buffer,
@@ -3149,11 +3151,14 @@ THREE.AnaglyphWebGLRenderer = function ( parameters ) {
 
 		/*** START DRAWING THE RED TEXTURE ***/
 		// attach the red texture
+		//if (switchTarget) {
+		//alert('in red');
 		_gl.bindFramebuffer(_gl.FRAMEBUFFER, redRenderTarget.__webglFramebuffer);
 		_gl.clear( _gl.COLOR_BUFFER_BIT | _gl.DEPTH_BUFFER_BIT | _gl.STENCIL_BUFFER_BIT );
+		_gl.clearColor(0, 0, 0, 1);
 		
 		// only draw red
-		_gl.colorMask(true, false, false, false);
+		//_gl.colorMask(true, false, false, false);
 		
 		camera.matrixAutoUpdate && camera.update( undefined, true );
 
@@ -3402,15 +3407,277 @@ THREE.AnaglyphWebGLRenderer = function ( parameters ) {
 
 		
 		/******** STOP DRAWING RED TEXTURE ************/
-		
+		//}
+		//else { 
 		/*********** START DRAWING BLUE TEXTURE **********/
-		
+		//alert('in blue');
 		// update camera position
 		
+		// attach the blue texture
+		_gl.bindFramebuffer(_gl.FRAMEBUFFER, blueRenderTarget.__webglFramebuffer);
+		_gl.clear( _gl.COLOR_BUFFER_BIT | _gl.DEPTH_BUFFER_BIT | _gl.STENCIL_BUFFER_BIT );
+		_gl.clearColor(0, 0, 0, 1);
+		
+		// only draw blue
+		//_gl.colorMask(false, false, true, false);	
+		
+		//rCamera.position.x = camera.position.x;
+		rCamera.matrixAutoUpdate && rCamera.update( undefined, true );
+
+		scene.update( undefined, false, rCamera );
+
+		rCamera.matrixWorldInverse.flattenToArray( _viewMatrixArray );
+		rCamera.projectionMatrix.flattenToArray( _projectionMatrixArray );
+
+		_projScreenMatrix.multiply( rCamera.projectionMatrix, rCamera.matrixWorldInverse );
+		//computeFrustum( _projScreenMatrix );
+
+		//this.initWebGLObjects( scene );
+
+		// test
+		//alert('Render Target width: ' + redRenderTarget.width);
+		
+		//setRenderTarget( renderTarget );
+
+		if ( this.autoClear || forceClear ) {
+
+			this.clear();
+
+		}
+
+		// set matrices
+
+		ol = scene.__webglObjects.length;
+
+		for ( o = 0; o < ol; o++ ) {
+
+			webglObject = scene.__webglObjects[ o ];
+			object = webglObject.object;
+
+			if ( object.visible ) {
+
+				if ( ! ( object instanceof THREE.Mesh ) || isInFrustum( object ) ) {
+
+					object.matrixWorld.flattenToArray( object._objectMatrixArray );
+
+					setupMatrices( object, rCamera );
+
+					unrollBufferMaterials( webglObject );
+
+					webglObject.render = true;
+
+					if ( this.sortObjects ) {
+
+						_vector3.copy( object.position );
+						_projScreenMatrix.multiplyVector3( _vector3 );
+
+						webglObject.z = _vector3.z;
+
+					}
+
+				} else {
+
+					webglObject.render = false;
+
+				}
+
+			} else {
+
+				webglObject.render = false;
+
+			}
+
+		}
+
+		/*if ( this.sortObjects ) {
+
+			scene.__webglObjects.sort( painterSort );
+
+		}*/
+
+		oil = scene.__webglObjectsImmediate.length;
+
+		for ( o = 0; o < oil; o++ ) {
+
+			webglObject = scene.__webglObjectsImmediate[ o ];
+			object = webglObject.object;
+
+			if ( object.visible ) {
+
+				if( object.matrixAutoUpdate ) {
+
+					object.matrixWorld.flattenToArray( object._objectMatrixArray );
+
+				}
+
+				setupMatrices( object, rCamera );
+
+				unrollImmediateBufferMaterials( webglObject );
+
+			}
+
+		}
+
+		// opaque pass
+
+		setBlending( THREE.NormalBlending );
+
+		for ( o = 0; o < ol; o ++ ) {
+
+			webglObject = scene.__webglObjects[ o ];
+
+			if ( webglObject.render ) {
+
+				object = webglObject.object;
+				buffer = webglObject.buffer;
+				opaque = webglObject.opaque;
+
+				setObjectFaces( object );
+
+				for ( i = 0; i < opaque.count; i ++ ) {
+
+					material = opaque.list[ i ];
+
+					setDepthTest( material.depthTest );
+					renderBuffer( rCamera, lights, fog, material, buffer, object );
+
+				}
+
+			}
+
+		}
+
+		// opaque pass (immediate simulator)
+
+		for ( o = 0; o < oil; o++ ) {
+
+			webglObject = scene.__webglObjectsImmediate[ o ];
+			object = webglObject.object;
+
+			if ( object.visible ) {
+
+				opaque = webglObject.opaque;
+
+				setObjectFaces( object );
+
+				for( i = 0; i < opaque.count; i++ ) {
+
+					material = opaque.list[ i ];
+
+					setDepthTest( material.depthTest );
+
+					program = setProgram( rCamera, lights, fog, material, object );
+					object.render( function( object ) { renderBufferImmediate( object, program, material.shading ); } );
+
+				}
+
+			}
+
+		}
+
+		// transparent pass
+
+		for ( o = 0; o < ol; o ++ ) {
+
+			webglObject = scene.__webglObjects[ o ];
+
+			if ( webglObject.render ) {
+
+				object = webglObject.object;
+				buffer = webglObject.buffer;
+				transparent = webglObject.transparent;
+
+				setObjectFaces( object );
+
+				for ( i = 0; i < transparent.count; i ++ ) {
+
+					material = transparent.list[ i ];
+
+					setBlending( material.blending );
+					setDepthTest( material.depthTest );
+
+					renderBuffer( rCamera, lights, fog, material, buffer, object );
+
+				}
+
+			}
+
+		}
+
+		// transparent pass (immediate simulator)
+
+		for ( o = 0; o < oil; o++ ) {
+
+			webglObject = scene.__webglObjectsImmediate[ o ];
+			object = webglObject.object;
+
+			if ( object.visible ) {
+
+				transparent = webglObject.transparent;
+
+				setObjectFaces( object );
+
+				for ( i = 0; i < transparent.count; i ++ ) {
+
+					material = transparent.list[ i ];
+
+					setBlending( material.blending );
+					setDepthTest( material.depthTest );
+
+					program = setProgram( rCamera, lights, fog, material, object );
+					object.render( function( object ) { renderBufferImmediate( object, program, material.shading ); } );
+
+				}
+
+			}
+
+		}
+
+		// render 2d
+
+		if ( scene.__webglSprites.length ) {
+
+			renderSprites( scene, rCamera );
+
+		}
+
+		// render stencil shadows
+
+		if ( _stencil && scene.__webglShadowVolumes.length && scene.lights.length ) {
+
+			renderStencilShadows( scene );
+
+		}
+
+
+		// render lens flares
+
+		if ( scene.__webglLensFlares.length ) {
+
+			renderLensFlares( scene, rCamera );
+
+		}
+
+
+		// Generate mipmap if we're using any kind of mipmap filtering
+
+		if ( renderTarget && renderTarget.minFilter !== THREE.NearestFilter && renderTarget.minFilter !== THREE.LinearFilter ) {
+
+			updateRenderTargetMipmap( renderTarget );
+
+		}
+
+			
+		
 		/*** STOP DRAWING BLUE ****/
+		//} // end of else
+		
+		switchTarget = ! switchTarget;
 		
 		// generate a new camera - just place it on the z-axis
-		anaglyphCamera = new THREE.Camera( 60, window.innerWidth / window.innerHeight, 1, 1000 );
+		
+		anaglyphCamera = new THREE.Camera( 75, window.innerWidth / window.innerHeight, 1, 100000 );
+		anaglyphCamera.position.z = 3500;
 		
 		// update camera
 		anaglyphCamera.matrixWorldInverse.flattenToArray( _viewMatrixArray );
@@ -3424,7 +3691,13 @@ THREE.AnaglyphWebGLRenderer = function ( parameters ) {
 		// attach the final texture
 		_gl.bindFramebuffer(_gl.FRAMEBUFFER, null);//finalRenderTarget.__webglFramebuffer);
 		_gl.clear( _gl.COLOR_BUFFER_BIT | _gl.DEPTH_BUFFER_BIT | _gl.STENCIL_BUFFER_BIT );
-		renderAnaglyph( scene, redRenderTarget, redRenderTarget );
+		_gl.clearColor(0, 0, 0, 1);
+		/*if (switchTarget)
+			renderAnaglyph( scene, blueRenderTarget, blueRenderTarget );
+		else
+			renderAnaglyph( scene, redRenderTarget, redRenderTarget );*/
+			
+		renderAnaglyph( scene, redRenderTarget, blueRenderTarget );
 		
 		_gl.finish();
 
@@ -3767,7 +4040,7 @@ THREE.AnaglyphWebGLRenderer = function ( parameters ) {
 
 		_gl.disable( _gl.CULL_FACE );
 		_gl.colorMask(true, true, true, true);
-		_gl.depthMask( false );
+		//_gl.depthMask( false );
 		
 		// draw 
 		_gl.drawElements( _gl.TRIANGLES, 6, _gl.UNSIGNED_SHORT, 0 );

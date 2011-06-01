@@ -3089,13 +3089,8 @@ THREE.WebGLRenderer = function ( parameters ) {
 		computeFrustum( _projScreenMatrix );
 
 		this.initWebGLObjects( scene );
-
-		// test
-		//alert('Render Target: ' + renderTarget);
 		
 		setRenderTarget( renderTarget );
-
-		//alert('Render Target2: ' + renderTarget);
 		
 		if ( this.autoClear || forceClear ) {
 
@@ -4755,7 +4750,6 @@ THREE.WebGLRenderer = function ( parameters ) {
 	function setRenderTarget( renderTexture ) {
 
 		if ( renderTexture && !renderTexture.__webglFramebuffer ) {
-			alert("in first one");
 			
 			if( renderTexture.depthBuffer === undefined ) renderTexture.depthBuffer = true;
 			if( renderTexture.stencilBuffer === undefined ) renderTexture.stencilBuffer = true;
@@ -4815,13 +4809,11 @@ THREE.WebGLRenderer = function ( parameters ) {
 		var framebuffer, width, height;
 
 		if ( renderTexture ) {
-			alert("in 2nd one");
 			framebuffer = renderTexture.__webglFramebuffer;
 			width = renderTexture.width;
 			height = renderTexture.height;
 
 		} else {
-			//alert("in 3rd one");
 			framebuffer = null;
 			width = _viewportWidth;
 			height = _viewportHeight;
@@ -4829,7 +4821,6 @@ THREE.WebGLRenderer = function ( parameters ) {
 		}
 
 		if ( framebuffer != _currentFramebuffer ) {
-			alert("in 4 one");
 			_gl.bindFramebuffer( _gl.FRAMEBUFFER, framebuffer );
 			_gl.viewport( _viewportX, _viewportY, width, height );
 

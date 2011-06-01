@@ -825,7 +825,11 @@ THREE.ShaderLib = {
 			"{",
 				"vec4 color1 = texture2D(texture1, vUV);",
 				"vec4 color2 = texture2D(texture2, vUV);",
-				"gl_FragColor = vec4((color1.x + color2.x)/2.0, 0.0, (color1.z + color2.z)/2.0, 1.0);",
+				"vec4 actual1 = vec4(0.7 * color1.g + 0.3 * color1.b, 0, 0, 1.0);",
+				"vec4 actual2 = vec4(0, color2.g, color2.b, 1.0);",
+				"gl_FragColor = actual1 + actual2;",
+				"//gl_FragColor = vec4((color1.x + color2.x)/2.0, 0.0, (color1.z + color2.z)/2.0, 1.0);",
+				"//gl_FragColor = vec4((color1.x + color2.x)/2.0, (color1.y + color2.y)/2.0, 0.0, 1.0);",
 				"//gl_FragColor = mix(color1, color2);",
 			"}"
 
